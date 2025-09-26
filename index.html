@@ -1,35 +1,164 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MIDI Program Change</title>
+    <title>MIDI Controller (PC & CC)</title>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        /* Estilos para a seção de Program Change */
+        .pc-container {
+            max-width: 900px;
+            margin: 20px auto;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+        }
         .buttons-container {
             display: grid;
             grid-template-columns: repeat(10, 1fr);
             gap: 10px;
-            padding: 20px;
+            padding: 10px 0;
         }
         button {
             padding: 10px;
             font-size: 16px;
             cursor: pointer;
         }
+        
+        /* Estilos para a seção de Control Change (CC) */
+        .cc-container {
+            max-width: 500px;
+            margin: 30px auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .cc-fader-control {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #cc-fader {
+            width: 90%;
+            height: 30px;
+            margin: 15px 0;
+        }
+        #ccValue {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #007bff;
+        }
+        label {
+            font-weight: bold;
+        }
+        hr {
+            margin: 40px 0;
+            border: 0;
+            border-top: 1px solid #ccc;
+        }
     </style>
 </head>
 <body>
-    <h1>MIDI Program Change</h1>
-    <div class="buttons-container" id="buttons-container"></div>
-    <div>
+
+    <h1>MIDI Controller</h1>
+
+    <div class="controls-container">
         <label for="midi-output-select">Selecione a saída MIDI:</label>
         <select id="midi-output-select"></select>
-        <button onclick="confirmOutput()">Confirmar</button>
+        <button onclick="confirmOutput()">Confirmar Saída</button>
+    </div>
+
+    <hr>
+
+    <div class="cc-container">
+        <h2>Control Change (CC) Fader</h2>
+
+        <div>
+            <label for="cc-select">CC # (Controlador):</label>
+            <select id="cc-select">
+                </select>
+        </div>
+
+        <div class="cc-fader-control">
+            <label>Valor:</label>
+            <span id="ccValue">0</span> <input type="range" id="cc-fader" min="0" max="127" value="0">
+        </div>
+    </div>
+    <hr>
+
+    <div class="pc-container">
+        <h2>Program Change (PC)</h2>
+        <div class="buttons-container" id="buttons-container"></div>
     </div>
 
     <script>
         let midiAccess;
         let selectedOutput;
+        const ccSelect = document.getElementById("cc-select");
+        const ccFader = document.getElementById("cc-fader");
+        const ccValueDisplay = document.getElementById("ccValue");
+        
+        // --- Setup do CC Fader e Seletor ---
+
+        // 1. Preenche a lista suspensa de CC (0 a 127)
+        for (let i = 0; i <= 127; i++) {
+            const option = document.createElement("option");
+            option.value = i;
+            // Adiciona nomes comuns para facilitar a identificação
+            let label = `${i}`;
+            if (i === 7) label += " (Volume)";
+            else if (i === 10) label += " (Pan)";
+            else if (i === 1) label += " (Modulation)";
+            option.textContent = label;
+            ccSelect.appendChild(option);
+        }
+        
+        // 2. Adiciona o listener para o Fader CC
+        ccFader.addEventListener("input", () => {
+            const value = parseInt(ccFader.value);
+            ccValueDisplay.textContent = value;
+            sendControlChange(value);
+        });
+
+        // --- Funções de Envio MIDI ---
+        
+        function sendControlChange(value) {
+            if (!selectedOutput) {
+                console.warn("Selecione uma saída MIDI antes de enviar o CC.");
+                ccFader.value = 0;
+                ccValueDisplay.textContent = 0;
+                return;
+            }
+            
+            const ccNumber = parseInt(ccSelect.value);
+            const channel = 0; // Canal MIDI 1 (0-15) - Mude este valor se precisar de outro canal
+
+            // Mensagem Control Change: [Status (0xB0 a 0xBF) + canal, Número do CC, Valor do CC]
+            selectedOutput.send([0xB0 + channel, ccNumber, value]);
+            console.log(`CC ${ccNumber} (Canal ${channel + 1}) enviado com valor ${value}`);
+        }
+
+        function sendProgramChange(program) {
+            if (!selectedOutput) {
+                alert("Selecione uma saída MIDI antes de enviar o Program Change.");
+                return;
+            }
+            
+            const channel = 0; // Canal MIDI 1 (0-15)
+
+            // Envia mensagem de Program Change (Status: 0xC0 + canal, Data: [program])
+            selectedOutput.send([0xC0 + channel, program]);
+            console.log("Program Change enviado para saída", selectedOutput.name, "com programa", program);
+        }
+
+        // --- Funções de Inicialização MIDI (Existentes, com pequenas melhorias) ---
 
         // Inicializa o acesso MIDI
         navigator.requestMIDIAccess()
@@ -42,46 +171,44 @@
             // Preenche a lista suspensa com as saídas MIDI
             const select = document.getElementById("midi-output-select");
             const outputs = Array.from(midiAccess.outputs.values());
+            
+            // Adiciona uma opção de placeholder
+            select.innerHTML = '<option value="" disabled selected>-- Selecione uma saída --</option>';
+            
             outputs.forEach((output, index) => {
                 const option = document.createElement("option");
-                option.value = index;
+                // Usamos o ID do output em vez do index para ser mais robusto
+                option.value = output.id; 
                 option.textContent = output.name;
                 select.appendChild(option);
             });
 
-            // Cria os botões dinamicamente
+            // Cria os botões de Program Change dinamicamente
             const buttonsContainer = document.getElementById("buttons-container");
             for (let i = 0; i < 100; i++) {
                 const button = document.createElement("button");
-                button.textContent = "Program " + i;
-                button.addEventListener("click", () => sendProgramChange(i));
+                button.textContent = "Program " + (i + 1); // Exibe de 1 a 100
+                button.addEventListener("click", () => sendProgramChange(i)); // Envia de 0 a 99
                 buttonsContainer.appendChild(button);
             }
         }
 
         function onMIDIFailure() {
             console.error("Falha ao acessar MIDI.");
+            alert("Falha ao acessar o MIDI. Verifique as permissões do navegador e se o dispositivo MIDI está conectado.");
         }
 
         function confirmOutput() {
             const select = document.getElementById("midi-output-select");
-            const selectedIndex = select.value;
-            selectedOutput = Array.from(midiAccess.outputs.values())[selectedIndex];
+            const selectedId = select.value;
+            selectedOutput = midiAccess.outputs.get(selectedId);
+            
             if (!selectedOutput) {
                 alert("Selecione uma saída MIDI válida.");
                 return;
             }
             console.log("Saída MIDI selecionada:", selectedOutput.name);
-        }
-
-        function sendProgramChange(program) {
-            if (!selectedOutput) {
-                alert("Selecione uma saída MIDI antes de enviar o Program Change.");
-                return;
-            }
-            // Envia mensagem de Program Change (Status: 0xC0, Data: [program])
-            selectedOutput.send([0xC0, program]);
-            console.log("Program Change enviado para saída", selectedOutput.name, "com programa", program);
+            alert(`Saída MIDI confirmada: ${selectedOutput.name}`);
         }
     </script>
 </body>
