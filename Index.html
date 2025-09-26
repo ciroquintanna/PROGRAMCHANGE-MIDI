@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIDI Program Change</title>
+    <style>
+        .buttons-container {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 10px;
+            padding: 20px;
+        }
+        button {
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>MIDI Program Change</h1>
+    <div class="buttons-container" id="buttons-container"></div>
+    <div>
+        <label for="midi-output-select">Selecione a saída MIDI:</label>
+        <select id="midi-output-select"></select>
+        <button onclick="confirmOutput()">Confirmar</button>
+    </div>
+
+    <script>
+        let midiAccess;
+        let selectedOutput;
+
+        // Inicializa o acesso MIDI
+        navigator.requestMIDIAccess()
+            .then(onMIDISuccess, onMIDIFailure);
+
+        function onMIDISuccess(midi) {
+            midiAccess = midi;
+            console.log("MIDI Acesso habilitado.");
+
+            // Preenche a lista suspensa com as saídas MIDI
+            const select = document.getElementById("midi-output-select");
+            const outputs = Array.from(midiAccess.outputs.values());
+            outputs.forEach((output, index) => {
+                const option = document.createElement("option");
+                option.value = index;
+                option.textContent = output.name;
+                select.appendChild(option);
+            });
+
+            // Cria os botões dinamicamente
+            const buttonsContainer = document.getElementById("buttons-container");
+            for (let i = 0; i < 100; i++) {
+                const button = document.createElement("button");
+                button.textContent = "Program " + i;
+                button.addEventListener("click", () => sendProgramChange(i));
+                buttonsContainer.appendChild(button);
+            }
+        }
+
+        function onMIDIFailure() {
+            console.error("Falha ao acessar MIDI.");
+        }
+
+        function confirmOutput() {
+            const select = document.getElementById("midi-output-select");
+            const selectedIndex = select.value;
+            selectedOutput = Array.from(midiAccess.outputs.values())[selectedIndex];
+            if (!selectedOutput) {
+                alert("Selecione uma saída MIDI válida.");
+                return;
+            }
+            console.log("Saída MIDI selecionada:", selectedOutput.name);
+        }
+
+        function sendProgramChange(program) {
+            if (!selectedOutput) {
+                alert("Selecione uma saída MIDI antes de enviar o Program Change.");
+                return;
+            }
+            // Envia mensagem de Program Change (Status: 0xC0, Data: [program])
+            selectedOutput.send([0xC0, program]);
+            console.log("Program Change enviado para saída", selectedOutput.name, "com programa", program);
+        }
+    </script>
+</body>
+</html>
